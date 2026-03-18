@@ -18,7 +18,7 @@ from langgraph.checkpoint.memory import MemorySaver
 def Fetch_Calendar_Event(date: str) -> str:
     """Fetches calendar event details for a given date."""
     # Mocking an ambiguous event to force the agent to ask for clarification
-    return '{"event_title": "Project Sync", "location": "Downtown Coffee Shop", "time": "3:00 PM"}'
+    return '{"event_title": "Date with my gf", "location": "Downtown Coffee Shop", "time": "3:00 PM"}'
 
 @tool
 def Fetch_Weather(location: str, time: str) -> str:
@@ -36,7 +36,9 @@ class Request_Clarification(BaseModel):
 # ==========================================
 
 # Initialize the Gemini Model (Requires GOOGLE_API_KEY in env)
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
+# llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
+llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", temperature=0)
+
 
 # Bind standard tools PLUS the schema for the HITL clarification tool
 tools_list = [Fetch_Calendar_Event, Fetch_Weather]
@@ -110,6 +112,10 @@ graph = builder.compile(checkpointer=memory, interrupt_before=["ask_human"])
 # 4. Terminal Execution Loop
 # ==========================================
 
+# ==========================================
+# 4. Terminal Execution Loop
+# ==========================================
+
 def run_pilot():
     if not os.environ.get("GOOGLE_API_KEY"):
         print("Error: Please set your GOOGLE_API_KEY environment variable.")
@@ -121,8 +127,9 @@ def run_pilot():
     print("--- Wardrobe Agent Pilot Initialized ---")
     user_input = input("User: ")
     
-    # Initial graph execution
-    graph.stream({"messages": [HumanMessage(content=user_input)]}, config, stream_mode="values")
+    # FIX: Iterate through the stream to force the graph to execute
+    for event in graph.stream({"messages": [HumanMessage(content=user_input)]}, config, stream_mode="values"):
+        pass # We are just driving the execution forward until it pauses or finishes
 
     while True:
         # Check current state of the graph
@@ -130,8 +137,12 @@ def run_pilot():
         
         # If there is no next node, the graph finished executing
         if not state.next:
-            final_message = state.values["messages"][-1]
-            print(f"\n[Agent Final Output]:\n{final_message.content}")
+            # Safely check if messages exist before trying to access them
+            if "messages" in state.values:
+                final_message = state.values["messages"][-1]
+                print(f"\n[Agent Final Output]:\n{final_message.content}")
+            else:
+                print("\n[Error]: Graph finished but no messages were found in state.")
             break
             
         # If the graph paused because of our HITL breakpoint
@@ -152,12 +163,12 @@ def run_pilot():
                 tool_call_id=clarification_call["id"]
             )
             
-            # Crucial Step: Update the state with the user's response, acting `as_node="ask_human"`
-            # so the graph knows this node's responsibility is fulfilled.
+            # Update the state with the user's response, acting `as_node="ask_human"`
             graph.update_state(config, {"messages": [tool_message]}, as_node="ask_human")
             
-            # Resume the graph by passing None to the stream
-            graph.stream(None, config, stream_mode="values")
+            # FIX: Iterate through the stream again to resume execution
+            for event in graph.stream(None, config, stream_mode="values"):
+                pass
 
 if __name__ == "__main__":
     run_pilot()
