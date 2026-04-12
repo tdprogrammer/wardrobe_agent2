@@ -140,7 +140,14 @@ def run_pilot():
             # Safely check if messages exist before trying to access them
             if "messages" in state.values:
                 final_message = state.values["messages"][-1]
-                print(f"\n[Agent Final Output]:\n{final_message.content}")
+                # Extract just the text content, handling both string and list formats
+                if isinstance(final_message.content, list):
+                    text_content = "\n".join(
+                        item["text"] for item in final_message.content if isinstance(item, dict) and "text" in item
+                    )
+                else:
+                    text_content = final_message.content
+                print(f"\n[Agent Final Output]:\n{text_content}")
             else:
                 print("\n[Error]: Graph finished but no messages were found in state.")
             break
